@@ -1,0 +1,9 @@
+# test
+test.php
+
+#bugs
+bugs/*
+
+#storage
+storage/comments/*
+!storage/comments/.gitkeep
