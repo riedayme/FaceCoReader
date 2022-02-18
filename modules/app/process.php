@@ -7,6 +7,10 @@ if (preg_match("/ft_id=([0-9]{9})\d+/", $posturl, $match)) {
 	$postid = str_replace('ft_id=', '', $match[0]);
 }elseif (preg_match("/fbid=([0-9]{9})\d+/", $posturl, $match)) {
 	$postid = str_replace('fbid=', '', $match[0]);
+}elseif (preg_match("/permalink\/([0-9]{9})\d+/", $posturl, $match)) {
+	$postid = str_replace('permalink/', '', $match[0]);
+}elseif (preg_match("/multi_permalinks=([0-9]{9})\d+/", $posturl, $match)) {
+	$postid = str_replace('multi_permalinks=', '', $match[0]);
 }else{	
 	preg_match("/[^\/|\.!=][0-9]{7,}(?!.*[0-9]{7,})\d+/", $posturl, $match);
 	if (count($match) < 1) {
@@ -23,12 +27,19 @@ if ($postid) {
 
 	$fb = new FaceCoReader([
 		'cookie' => $_SESSION['login']['cookie']
-		]);
+	]);
 
-	set_time_limit(120); // 2 minutes
+	// get post info
+	$postinfo = $fb->ReadPost($postid);
+	if (!$postinfo['status']) {
+		$_SESSION['message'] = [$postinfo['response'],'danger'];
+		header("Location: ./");
+	}	
+
+	set_time_limit(0); 
 	$deep = false;
 	$prevdeep = false;
-	$all_data = array();
+	$comments_data = array();
 	do {
 
 		$data = $fb->ReadComment($postid,$deep);
@@ -38,8 +49,7 @@ if ($postid) {
 		}
 
 		// check deep
-		if ($data['deep'] !== null AND $prevdeep !== false) {
-			echo "awe";
+		if ($data['deep'] !== false AND $prevdeep !== false) {
 			// parse deep 
 			$parse = parse_url($data['deep'], PHP_URL_QUERY);
 			parse_str($parse, $query_deep);
@@ -52,7 +62,7 @@ if ($postid) {
 			}
 		}
 
-		$all_data = array_merge($all_data,$data['response']);
+		$comments_data = array_merge($comments_data,$data['response']);
 
 		if ($data['deep'] !== null) {
 			$deep = $data['deep'];
@@ -61,14 +71,17 @@ if ($postid) {
 			$deep = false;
 		}
 
+		sleep(rand(4,8));
+
 	} while ($deep !== false);
 
-	$comment_data = array();
-	foreach ($all_data as $comment) {
+	$all_comments = array();
+	foreach ($comments_data as $key => $comment) {
 
 		if ($comment['reply_url']) {
 
 			$deep = false;
+			$reply_comments = array();
 			do {
 
 				$data = $fb->ReadCommentReply($comment['reply_url'],$deep);
@@ -77,14 +90,7 @@ if ($postid) {
 					continue;
 				}
 
-				$comment_data[] = [
-				'userurl' => $comment['userurl'],
-				'username' => $comment['username'],
-				'commentid' => $comment['commentid'],
-				'message' => $comment['message'],
-				'media' => $comment['media'],
-				'reply' => $data['response']
-				];
+				$reply_comments = array_merge($reply_comments,$data['response']);
 
 				if ($data['deep'] !== null) {
 					$deep = $data['deep'];
@@ -92,26 +98,45 @@ if ($postid) {
 					$deep = false;
 				}
 
+				sleep(rand(4,8));
+
 			} while ($deep !== false);
 
+			$all_comments[] = [
+				'userurl' => $comment['userurl'],
+				'username' => $comment['username'],
+				'commentid' => $comment['commentid'],
+				'message' => $comment['message'],
+				'media' => $comment['media'],
+				'reply' => $reply_comments
+			];
+
 		}else{
-			$comment_data[] = [
-			'userurl' => $comment['userurl'],
-			'username' => $comment['username'],
-			'commentid' => $comment['commentid'],
-			'message' => $comment['message'],
-			'media' => $comment['media'],
-			'reply' => false
+			$all_comments[] = [
+				'userurl' => $comment['userurl'],
+				'username' => $comment['username'],
+				'commentid' => $comment['commentid'],
+				'message' => $comment['message'],
+				'media' => $comment['media'],
+				'reply' => false
 			];
 		}
 	}
+
 	set_time_limit(30);
 
-	if (count($comment_data) < 0) {
+	if (count($all_comments) < 0) {
 		$_SESSION['message'] = ["No Comment to display",'info'];
 	}else{
 		$_SESSION['message'] = ["Show Comments from post <a href='https://fb.com/{$postid}' target='_blank'>{$postid}</a>",'info'];
-		file_put_contents("./storage/comments/{$postid}.json", json_encode($comment_data,JSON_PRETTY_PRINT));
+
+		// build json
+		$save = [
+		'post' => $postinfo['response'],
+		'comments' => $all_comments
+		];
+
+		file_put_contents("./storage/comments/{$postid}.json", json_encode($save,JSON_PRETTY_PRINT));
 		$_SESSION['postid'] = $postid;
 	}
 	header("Location: ./");

@@ -3,6 +3,11 @@
 require "includes/helper.php";
 require "includes/config.php";
 
+// Cookie Login
+if (!isset($_SESSION['login']) AND isset($_COOKIE['login'])) {
+	include "modules/login/cookie.php";
+}
+
 switch (@$_GET['module']) {	
 
 	case 'logout':

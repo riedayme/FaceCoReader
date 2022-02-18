@@ -209,9 +209,32 @@ class FaceCoReader
 
 	public function Auth($cookie)
 	{
+		$check = $this->CheckCookie($cookie);
+		if (!$check['status']) return $check;
+
+		$accesstoken = $this->GetAccessToken();
+		if (!$accesstoken['status']) return $accesstoken;
+
+		$userinfo = $this->GetUserInfoUseToken($accesstoken['response']);
+		if (!$userinfo['status']) return $userinfo;
+
+		return [
+		'status' => true,
+		'response' => [
+		'cookie' => $cookie,
+		'accesstoken' => $accesstoken['response'],
+		'userid' => $userinfo['response']['id'],
+		'username' => $userinfo['response']['name'],
+		'photo' => $userinfo['response']['picture']['data']['url']
+		]
+		];	
+	}
+
+	public function CheckCookie($cookie)
+	{
 
 		// set cookie on header for login
-		$this->headers = array_merge($this->headers, ['Cookie: '.$cookie]);
+		$this->headers = array_merge($this->headers, ['Cookie: '.$cookie]);		
 
 		$connect = $this->Fetch($this->base, false , $this->headers , false, false, $this->proxy);
 		if (!$connect['status']) return $connect;
@@ -223,13 +246,10 @@ class FaceCoReader
 			];	
 		}
 
-		$this->GetAccessToken();
-		$this->GetUserInfoUseToken();
-
 		return [
 		'status' => true,
-		'response' => array_merge($this->login,['cookie' => $cookie])
-		];	
+		'response' => 'Cookie Valid'
+		];			
 	}
 
 	protected function GetAccessToken()
@@ -248,15 +268,16 @@ class FaceCoReader
 			];	
 		}
 
-		$this->login = [
-		'accesstoken' => $accesstoken
-		];
+		return [
+		'status' => true,
+		'response' => $accesstoken
+		];	
 	}	
 
-	protected function GetUserInfoUseToken()
+	protected function GetUserInfoUseToken($accesstoken)
 	{
 
-		$url = $this->apibase."me?fields=name,picture.type(large)&access_token=".$this->login['accesstoken'];
+		$url = $this->apibase."me?fields=name,picture.type(large)&access_token=".$accesstoken;
 
 		$connect = $this->Fetch($url, false , $this->headers , false, false, $this->proxy);
 		if (!$connect['status']) return $connect;
@@ -269,12 +290,58 @@ class FaceCoReader
 			'response' => 'Fail Get User Information'
 			];	
 		}else{
-			$this->login = array_merge($this->login, [
-				'userid' => $response['id'],
-				'username' => $response['name'],
-				'photo' => $response['picture']['data']['url']
-				]);
+			return [
+			'status' => true,
+			'response' => $response
+			];	 
 		}
+	}
+
+	/**
+	 * Read Post
+	 */
+	public function ReadPost($postid)
+	{
+
+		$url = $this->base.$postid;
+
+		$connect = $this->Fetch($url, false , $this->headers , false, false, $this->proxy, true);
+		if (!$connect['status']) {return $connect;}		
+
+		$dom = $this->GetDom($connect['body']);
+		$xpath = $this->GetXpath($dom);
+
+		$query = '//div[contains(@data-ft,"'.$postid.'")]';
+
+		$container = $xpath->query($query);
+
+		if ($container->length > 0) {
+
+			foreach ($container as $child) {
+				$header = $xpath->query('//header/h3/span',$child);
+				$message = $xpath->query($query.'/div/div[1]',$child);
+				$media = $xpath->query($query.'/div/div[2]',$child);
+				if ($media->length < 1) {
+					$media = false;
+				}else{
+					$media = $this->innerHTML($media[0]);
+				}
+
+				return [
+				'status' => true,
+				'response' => [
+				'header' => $this->innerHTML($header[0]),
+				'message' => $this->innerHTML($message[0]),
+				'media' => $media
+				]
+				];
+			}
+		}
+
+		return [
+		'status' => false,
+		'response' => 'Post Not Found'
+		];
 	}
 
 	/**
@@ -336,9 +403,9 @@ class FaceCoReader
 					$username = $profilexpath->nodeValue;
 					$userurl = $profilexpath->getAttribute('href');
 
-					$message = $xpath->query('//div[@id="'.$commentid.'"]/div/div[1]',$node)[0]->nodeValue;
+					$message = $xpath->query('//div[@id="'.$commentid.'"]/div/div[1]',$node);
 
-					$media = $xpath->query('//div[@id="'.$commentid.'"]/div/div[2]/div/a',$node);
+					$media = $xpath->query('//div[@id="'.$commentid.'"]/div/div[2]/div',$node);
 					if ($media->length > 0) {
 						$media = $this->innerHTML($media[0]);
 					}else{
@@ -356,7 +423,7 @@ class FaceCoReader
 					'userurl' => $userurl,
 					'username' => $username,
 					'commentid' => $build_commentid,
-					'message' => $message,
+					'message' =>  $this->innerHTML($message[0]),
 					'media' => $media,
 					'reply_url' => $reply
 					];
@@ -391,12 +458,20 @@ class FaceCoReader
 		$dom = $this->GetDom($connect['body']);
 		$xpath = $this->GetXpath($dom);
 
-		$GetDeepURL = $xpath->query('/html/body/div/div/div[2]/div/div[1]/div[2]/div[1]/a/@href');
+		$GetDeepURL = $xpath->query('//div[contains(@id,"comment_replies_more_1")]/a/@href');
+
+		// if xpath more_1 not found
+		// if($GetDeepURL->length < 1) {
+		// 	// use more_2
+		// 	$GetDeepURL = $xpath->query('//div[contains(@id,"comment_replies_more_2")]/a/@href');
+		// }
 
 		$deep = false;
 		if ($GetDeepURL->length > 0) {
 			$deep = $GetDeepURL[0]->value;
 		}
+
+		// var_dump($deep).PHP_EOL;
 
 		/**
 		 * Extract
@@ -417,7 +492,7 @@ class FaceCoReader
 					$username = $profilexpath->nodeValue;
 					$userurl = $profilexpath->getAttribute('href');
 
-					$message = $xpath->query('//div[@id="'.$commentid.'"]/div/div[1]',$node)[0]->nodeValue;
+					$message = $xpath->query('//div[@id="'.$commentid.'"]/div/div[1]',$node);
 
 					$media = $xpath->query('//div[@id="'.$commentid.'"]/div/div[2]/div/a',$node);
 					if ($media->length > 0) {
@@ -437,7 +512,7 @@ class FaceCoReader
 					'userurl' => $userurl,
 					'username' => $username,
 					'commentid' => $build_commentid,
-					'message' => $message,
+					'message' => $this->innerHTML($message[0]),
 					'media' => $media,
 					'reply_url' => $reply
 					];

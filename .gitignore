@@ -1,9 +1,15 @@
 # test
 test.php
 
+# start
+start.bat
+
 #bugs
 bugs/*
 
 #storage
 storage/comments/*
 !storage/comments/.gitkeep
+
+storage/login/*
+!storage/login/.gitkeep

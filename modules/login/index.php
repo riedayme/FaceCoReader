@@ -28,6 +28,31 @@
 					</svg>
 				</button>
 			</form>
+
+			<div class="mt-5">
+				<h3 class="fs-4">
+					Previous Login
+				</h3>
+				<div>
+
+					<?php  
+					$dir = './storage/login/';
+					$files = glob($dir.'*.json');
+					usort($files, function($a, $b) {
+						return filemtime($b) - filemtime($a);
+					});
+
+					$badge = ['bg-primary', 'bg-secondary', 'bg-success', 'bg-danger', 'bg-info'];
+					foreach($files as $file){
+						$read = file_get_contents($file);
+						$read = json_decode($read,true);
+						?>
+						<a class="badge <?php echo $badge[array_rand($badge)] ?> text-decoration-none" href="./?module=login&read=<?php echo basename($file); ?>"><?php echo $read['username']; ?></a>
+						<?php
+					}
+					?>
+				</div>
+			</div>
 		</main>
 	</div>
 </div>
