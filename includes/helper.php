@@ -10,10 +10,10 @@ function base_url($uri = false)
 
 	if ($uri)
 	{
-		$base_url = $full_path;
-	}
+        $base_url = $full_path.$uri;
+    }
 
-	return $base_url;
+    return $base_url;
 }
 
 function turnUrlIntoHyperlink($string){

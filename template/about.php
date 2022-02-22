@@ -41,7 +41,6 @@
 							<td class="u-p-medium u-text-bold" colspan="2">
 								<span class="badge mb-1 bg-info">Bootstrap 5</span>&nbsp;
 								<span class="badge mb-1 bg-primary">PHP Native</span>
-								<span class="badge mb-1 bg-warning">PHPImage</span>
 							</td>
 						</tr>  
 						<tr>
